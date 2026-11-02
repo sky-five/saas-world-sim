@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "saas-world-sim"
+version = "0.1.0"
+description = "Seeded, deterministic simulated SaaS business with an as-of-date view and a mock paginated API."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = ["numpy>=2.0", "pandas>=2.2", "pyarrow>=15"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/saas_world_sim"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
