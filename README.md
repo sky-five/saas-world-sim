@@ -17,7 +17,7 @@ A subscription software business sold to roofing contractors, from 2024-01-01 to
 | Ad platforms | `ad_spend` |
 | Customers' own sales ops | `contractor_leads` |
 
-About 7,200 accounts and 1.0 M rows by mid-2026.
+About 7,200 accounts and 960,000 rows as of 2026-06-30.
 
 ## How the data is made
 
@@ -27,7 +27,7 @@ About 7,200 accounts and 1.0 M rows by mid-2026.
 
 ## Planted patterns
 
-Built in on purpose so analysis has something real to find (each one has a test):
+Built in on purpose so analysis has something real to find (most are checked by a test):
 
 - Channel quality differs: referral and supplier-partner signups convert best, Facebook worst.
 - Sending a proposal in week 1 lifts conversion more than 5x.
