@@ -56,7 +56,7 @@ BACKGROUND_INTENTS = {"how_to_file": 0.3, "billing_question": 0.3, "plan_change"
 
 BASE_DAILY_SIGNUPS = 3.0
 CLAIMS_PER_MONTH = 0.07
-SUMMER_HVAC_MULT = 3.0           # Jun-Aug
+SUMMER_HVAC_MULT = 4.0           # Jun-Aug
 WAITING_PERIOD = pd.Timedelta(days=30)
 DUPLICATE_P = 0.03               # chance a claim is filed again for the same item a few days later
 NO_ESTIMATE_P = 0.15
@@ -164,7 +164,7 @@ def _simulate_customer(n: int, signup_at: pd.Timestamp, seed: int) -> tuple[dict
     item_names, item_w = list(ITEMS), np.array([w for w, _ in ITEMS.values()])
     claims: list[dict] = []
     tickets: list[tuple[pd.Timestamp, str, dict | None]] = []
-    last_denial: pd.Timestamp | None = None
+    denials: list[pd.Timestamp] = []
     month_start = signup_at
     while month_start <= HORIZON_END:
         month_end = month_start + MONTH
@@ -192,14 +192,16 @@ def _simulate_customer(n: int, signup_at: pd.Timestamp, seed: int) -> tuple[dict
                 if r.random() < 0.2:
                     tickets.append((t + pd.Timedelta(days=float(r.uniform(1, 5))), "claim_status", c))
                 if c["decision"] == "denied":
-                    last_denial = c["decided_at"]
+                    denials.append(c["decided_at"])
                     if r.random() < DISPUTE_TICKET_P:
                         tickets.append((c["decided_at"] + pd.Timedelta(days=float(r.uniform(0, 14))),
                                         "claim_dispute", c))
         for at in month_start + (month_end - month_start) * r.random(r.poisson(0.05)):
             tickets.append((at, str(r.choice(list(BACKGROUND_INTENTS), p=list(BACKGROUND_INTENTS.values()))),
                             None))
-        recently_denied = last_denial is not None and month_end - last_denial <= 90 * DAY
+        if month_end > HORIZON_END:
+            break
+        recently_denied = any(month_end - 90 * DAY <= d <= month_end for d in denials)
         if r.random() < BASE_MONTHLY_CHURN * (DENIAL_CHURN_MULT if recently_denied else 1.0):
             acct["canceled_at"] = month_end
             acct["cancel_reason"] = "claim_denied" if recently_denied else str(r.choice(OTHER_CANCEL_REASONS))
