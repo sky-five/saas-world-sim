@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "saas-world-sim"
-version = "0.1.0"
+version = "0.2.0"
 description = "Seeded, deterministic simulated SaaS business with an as-of-date view and a mock paginated API."
 readme = "README.md"
 requires-python = ">=3.12"

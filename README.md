@@ -38,10 +38,50 @@ Built in on purpose so analysis has something real to find (most are checked by 
 - About 8% of lead stage timestamps are never logged.
 - Cancel reasons match the theme of the account's most recent support ticket.
 
+## Domain pack: support, claims and CRM
+
+A second, smaller business on the same engine: a home-warranty provider whose customers pay monthly for a plan, file claims when an appliance or home system breaks, and write to support. It is separate from the roofing world above, so adding it changed none of the core numbers. It is built for testing support and claims agents against known answers.
+
+| System | Table | What is in it |
+|---|---|---|
+| CRM | `crm_accounts` | customer, plan (basic / plus / premier), contact details, status, cancel date and reason |
+| Claims desk | `claims` | claims intake: item, free-text description, amount, photos / repair estimate, decision, payout |
+| Help desk | `support_tickets` | free-text subject and body, optional linked claim, escalation, CSAT |
+
+3,468 customers, 3,011 claims and 3,856 tickets as of 2026-06-30. The full history to 2027-12-31 builds in about 10 seconds and is not cached on disk.
+
+```python
+from datetime import date
+from saas_world_sim.packs import support_claims_as_of
+
+tables = support_claims_as_of(date(2026, 6, 30))  # crm_accounts, claims, support_tickets
+tables["claims"].approved_usd.sum()                # 1461461.45
+```
+
+The as-of view works like the core one: later rows dropped, later timestamps nulled, statuses recomputed (open claims have no decision yet, open tickets no CSAT), `updated_at` set.
+
+**Claims rules**, applied in order, so an agent's answer can be checked against them:
+
+1. Same item claimed again within 7 days: denied, `duplicate`.
+2. Filed within 30 days of signup: denied, `waiting_period`.
+3. Item not covered by the plan: denied, `not_covered` (basic covers appliances; plus adds HVAC, water heater, plumbing, electrical; premier adds roof leaks and pool pumps).
+4. No repair estimate: decided about 3x slower and 70% denied, `missing_documents`.
+5. Otherwise paid: the claim capped at the plan limit ($1,500 / $3,000 / $5,000) minus the service fee ($75 / $100 / $125); `partial` when the claim was over the limit.
+
+**Planted patterns** (each checked by a test in `tests/test_support_claims.py`):
+
+- HVAC is 42% of claims in June-August against 20% the rest of the year.
+- 64% of denied claims get a dispute ticket within 14 days; dispute tickets escalate 10x as often (50% vs 5%) and score lower CSAT (2.5 vs 4.0).
+- Customers with a denied claim cancel more (37% vs 23% of other claimants); `claim_denied` as a cancel reason always follows a denial in the last 90 days.
+- About 15% of ticket bodies contain contact details, for redaction tests. Phone numbers are all in the 555-0100 to 555-0199 range set aside for fiction; emails use example.com.
+- About 3% of claims are duplicates.
+
+Ticket intent labels (`true_intent`) are kept in `build_support_claims_history()` for scoring and dropped from the as-of view. `tests/test_support_claims_fingerprint.py` locks the pack's row counts and totals.
+
 ## Install and use
 
 ```bash
-pip install "saas-world-sim @ git+https://github.com/sky-five/saas-world-sim@v0.1.0"
+pip install "saas-world-sim @ git+https://github.com/sky-five/saas-world-sim@v0.2.0"
 ```
 
 ```python
@@ -66,7 +106,7 @@ The first call simulates the full history (about a minute on 8 cores) and caches
 
 ```bash
 pip install -e ".[dev]"
-pytest -q        # 38 tests: determinism, as-of view, API paging, planted patterns, fingerprint
+pytest -q        # 58 tests: determinism, as-of view, API paging, planted patterns, fingerprints
 ```
 
 CI runs lint and the full suite on every push.
