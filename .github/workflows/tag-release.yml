@@ -1,0 +1,36 @@
+name: tag-release
+
+# Tags main with v<version> from pyproject.toml when that tag doesn't exist yet,
+# after the tests pass. Downstream repos pin these tags.
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q -e ".[dev]"
+      - run: python -m pytest -q
+      - name: Tag the version if it is new
+        run: |
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists"; exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
