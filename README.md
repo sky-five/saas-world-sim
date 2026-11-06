@@ -78,10 +78,44 @@ The as-of view works like the core one: later rows dropped, later timestamps nul
 
 Ticket intent labels (`true_intent`) are kept in `build_support_claims_history()` for scoring and dropped from the as-of view. `tests/test_support_claims_fingerprint.py` locks the pack's row counts and totals.
 
+## Domain pack: contact centre
+
+Calls and chats into the same home-warranty business, from its contact-centre platform. The customers and claims are the support/claims pack's (read, never changed), so a call about `CLM-000123-01` is about a real claim, and adding the pack changed none of the other numbers. It is built for testing webhook intake, customer lookup, intent, escalation and PII redaction against known answers.
+
+| Table | What is in it |
+|---|---|
+| `contact_interactions` | one row per call or chat: channel, caller phone or chat email, account number keyed into the phone menu (if any), wait, answer, escalation and end times, outcome (handled / escalated / abandoned) |
+| `contact_events` | the event stream behind each contact: `contact.queued`, `contact.answered`, each `message` (speaker and text), `contact.escalated`, `contact.ended` or `contact.abandoned` |
+
+3,689 contacts and 37,020 events as of 2026-06-30 (2,866 handled, 370 escalated, 453 abandoned).
+
+```python
+from datetime import date
+from saas_world_sim.packs import contact_centre_as_of, contact_centre_webhooks
+
+tables = contact_centre_as_of(date(2026, 6, 30))   # contact_interactions, contact_events
+deliveries = contact_centre_webhooks(date(2026, 6, 30))
+deliveries[0]["type"], deliveries[0]["data"]["ivr_account_id"]   # ('contact.queued', 'CUS-002417')
+```
+
+`contact_centre_webhooks(day)` returns the webhook deliveries made during that day, in delivery order, as JSON-safe dicts. About 3% of events are delivered twice (same `event_id`, new `delivery_id`) and about 5% arrive 1 to 10 minutes late, after events that happened later. Dropping repeated `event_id`s and sorting by `(occurred_at, interaction_id, seq)` gives back the event table; a test checks that.
+
+The platform does not know who called or why. Those answers are kept in `build_contact_centre_history()` as `true_account_id`, `true_intent`, `true_claim_id` and, per message, `pii_kinds`, and dropped from the as-of view.
+
+**Planted patterns** (each checked by a test in `tests/test_contact_centre.py`):
+
+- The customer can always be identified, but not always from the platform's fields: about 21% of contacts have neither a keyed-in account number nor a chat email on file, and the customer says the account number in their first message instead.
+- Claim disputes follow denied claims and escalate 40% of the time, technician no-shows 12%, everything else 3-4%.
+- Monday 09:00-12:00 the queue is longer (median wait 90 s vs 30 s) and 33% of contacts are abandoned, against 11% at other times.
+- About half of technician no-show contacts come back within a few days.
+- 12% of customer messages contain a phone number (555-0100 to 555-0199, set aside for fiction), an email (example.com) or a card number (Luhn-valid, in the 4000 0000 test range). The labels match the text exactly, and agents never repeat them.
+
+`tests/test_contact_centre_fingerprint.py` locks the pack's row counts, outcomes and one day's deliveries.
+
 ## Install and use
 
 ```bash
-pip install "saas-world-sim @ git+https://github.com/sky-five/saas-world-sim@v0.2.0"
+pip install "saas-world-sim @ git+https://github.com/sky-five/saas-world-sim@v0.3.0"
 ```
 
 ```python
@@ -106,7 +140,7 @@ The first call simulates the full history (about a minute on 8 cores) and caches
 
 ```bash
 pip install -e ".[dev]"
-pytest -q        # 58 tests: determinism, as-of view, API paging, planted patterns, fingerprints
+pytest -q        # 81 tests: determinism, as-of view, API paging, planted patterns, webhook dedupe, fingerprints
 ```
 
 CI runs lint and the full suite on every push.
